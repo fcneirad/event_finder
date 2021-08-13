@@ -1,18 +1,10 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import scipy.signal
-import scipy.interpolate
-import pandas as pd
-import collections
-import sys
 from scipy.sparse import diags
-import os
 from scipy.interpolate import interp1d
 
-### Find cross test ###
-
+## This function finds the indices of the array where an event starts and end given a threshold
 def flatten(x,y,limit):
-
+    """Return the indices of x where the variation in y is greater than limit."""
     k = np.ones_like(y)
     dx = np.concatenate([np.diff(x),[x[-2]-x[-1]]])
     Dx = diags([-k,k],[0,1]).todense()
@@ -67,7 +59,6 @@ def flatten(x,y,limit):
                 dmag_matrix[i,j] = y[ind[j]] - y[ind[i]]
 
 
-
     aux1 = True
     aux2 = True
     
@@ -80,10 +71,11 @@ def flatten(x,y,limit):
             j1 += 1
             continue
         if not np.all(dmag_matrix[:,j1] == mask):
-            i1 = np.min(np.where(dmag_matrix[:,j1] != 0))
+            i1 = np.max(np.where(dmag_matrix[:,j1] != 0))
             j2 = j1+1
             i2 = j2-1
             break
+            
         
     while aux1:
         if i1+1 == dmag_matrix.shape[0] or j1+1 == dmag_matrix.shape[1]:
@@ -141,58 +133,49 @@ def flatten(x,y,limit):
             j2 += 1
             i2 = j2 - 1
             continue
-            
+    
+    ## ind denotes starting point of event
+    ## dni denotes ending point of event
+    ## up means it was an increase in magnitude (demagnification)
+    ## dn means it was an decrease in magnitude (magnification)
+    ## dmag is the variation of the magnitude of the event
+    return ind_up, ind_dn, dni_up, dni_dn, dmag_up, dmag_dn
 
-    return ind_up,ind_dn,dni_up,dni_dn,dmag_up,dmag_dn
+## Interpolate to get the x value where 90% of the variation on the y axis respect to the "peak" occurs
+def events_90(x, y, limit):
+    up_start, dn_start, up_end, dn_end, up_dmag, dn_dmag = flatten(x, y, limit)
+    x_starts = []
+    x_ends   = []
+    y_starts = []
+    y_ends   = []
+    flag     = []
+    ## For the "up" events the ending point is modified
+    for i in range(len(up_start)):
+        f = interp1d(y[up_start[i]:up_end[i]+1], x[up_start[i]:up_end[i]+1], kind='zero')
+        x_starts.append(x[up_start[i]])
+        x_ends.append(f(y[up_start[i]]+0.9*up_dmag[i]))
+        y_starts.append(y[up_start[i]])
+        y_ends.append(y[up_start[i]]+0.9*up_dmag[i])
+        flag.append("demag")
+    ## For the "dn" events the starting point is modified
+    for i in range(len(dn_start)):
+        f = interp1d(y[dn_start[i]:dn_end[i]+1], x[dn_start[i]:dn_end[i]+1], kind='zero')
+        x_starts.append(f(y[dn_end[i]]-0.9*dn_dmag[i]))
+        x_ends.append(x[dn_end[i]])
+        y_starts.append(y[dn_end[i]]-0.9*dn_dmag[i])
+        y_ends.append(y[dn_end[i]])
+        flag.append("demag")
 
-def cross(path_to_curves,band,nlc,limit=1.0):
-    #path_to_curves = '/home/favio/HE0230/s95/output/'
-    band_aux = np.where(np.array(['u','g','r','i','z','y'])==band)[0][0]
-    data = np.loadtxt(path_to_curves+'tablet_'+str(nlc)+'.dat').T
-    aux1 = path_to_curves+'tablet_'+str(nlc)+'.dat'
-    if not np.any(data):
-        return [],[],[],[],[],[]
-    t = data[0]
-    if isinstance(t,np.float) or os.stat(aux1).st_size == 0:
-        return [],[],[],[],[],[]
-    mag = data[band_aux+1]
-    min_event_index, max_event_index, min_event_xedni, max_event_xedni, dmag_dn, dmag_up = flatten(t,mag,limit)
-    index_start = min_event_index+max_event_index
-    index_stop  = min_event_xedni+max_event_xedni
-    t_10_f = []
-    mag_10_f = []
-    for i,f in zip(index_start,index_stop):
-        h = interp1d(10**(mag[range(i,f+1)]/-2.5),t[range(i,f+1)])
-        mag_90 = np.abs(10**(mag[i]/-2.5) - 10**(mag[f]/-2.5))*0.9
-        if mag[i] < mag[f]:
-            mag_10 = 10**(mag[i]/-2.5) - mag_90
-            t_10 = h(mag_10)
-            t_10_f.append(t_10)
-            mag_10_f.append(-2.5*np.log10(mag_10))
-        if mag[i] > mag[f]:
-            mag_10 = 10**(mag[f]/-2.5) - mag_90
-            t_10 = h(mag_10)
-            t_10_f.append(t_10)
-            mag_10_f.append(-2.5*np.log10(mag_10))
-    return t[index_start],t[index_stop],mag[index_start],mag[index_stop],t_10_f,mag_10_f
+    return x_starts, x_ends, y_starts, y_ends, flag
 
-filters = ['u','g','r','i','z','y']
-path_to_curves = "/home/favio/HE0230/s60/output/"
-path_to_events = "/home/favio/HE0230/s60/events/"
-
-for i in filters:
-	table = []
-	for j in range(10000):
-		print(j,i)
-		jd_start,jd_stop,m_start,m_stop,jd_10,m_10 = cross(path_to_curves,i,j)
-		toste = np.array([jd_start,jd_stop,m_start,m_stop,jd_10,m_10]).T
-		dataf = pd.DataFrame(toste,columns=['pix_start','pix_stop','mag_start','mag_stop','pix_10','mag_10'])
-		if not os.path.exists(path_to_events):
-			os.makedirs(path_to_events)
-		dataf.to_csv(path_to_events+i+'_'+str(int(j)).zfill(4)+'.csv')
-		
-
-
-
-
-
+def cc_count(curve):
+    aux = np.where(curve==1)[0]
+    red_ind = []
+    if len(aux) > 1:
+        red_ind.append(aux[0])
+        for i in range(len(aux)-1):
+            if aux[i+1] - aux[i] == 1:
+                continue
+            if aux[i+1] - aux[i] > 1:
+                red_ind.append(aux[i+1])
+    return len(red_ind)
