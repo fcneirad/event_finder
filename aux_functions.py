@@ -142,7 +142,7 @@ def flatten(x,y,limit):
     return ind_up, ind_dn, dni_up, dni_dn, dmag_up, dmag_dn
 
 ## Interpolate to get the x value where 90% of the variation on the y axis respect to the "peak" occurs
-def events_90(x, y, limit):
+def events_90(x, y, limit, int_frac=0.9):
     up_start, dn_start, up_end, dn_end, up_dmag, dn_dmag = flatten(x, y, limit)
     x_starts = []
     x_ends   = []
@@ -153,18 +153,51 @@ def events_90(x, y, limit):
     for i in range(len(up_start)):
         f = interp1d(y[up_start[i]:up_end[i]+1], x[up_start[i]:up_end[i]+1], kind='zero')
         x_starts.append(x[up_start[i]])
-        x_ends.append(f(y[up_start[i]]+0.9*up_dmag[i]))
+        x_ends.append(f(y[up_start[i]] + int_frac * up_dmag[i]))
         y_starts.append(y[up_start[i]])
-        y_ends.append(y[up_start[i]]+0.9*up_dmag[i])
+        y_ends.append(y[up_start[i]] + int_frac * up_dmag[i])
         flag.append("demag")
     ## For the "dn" events the starting point is modified
     for i in range(len(dn_start)):
         f = interp1d(y[dn_start[i]:dn_end[i]+1], x[dn_start[i]:dn_end[i]+1], kind='zero')
-        x_starts.append(f(y[dn_end[i]]-0.9*dn_dmag[i]))
+        x_starts.append(f(y[dn_end[i]] - int_frac * dn_dmag[i]))
         x_ends.append(x[dn_end[i]])
-        y_starts.append(y[dn_end[i]]-0.9*dn_dmag[i])
+        y_starts.append(y[dn_end[i]] - int_frac * dn_dmag[i])
         y_ends.append(y[dn_end[i]])
         flag.append("demag")
+
+    return x_starts, x_ends, y_starts, y_ends, flag
+
+## Interpolate to get the x value where 90% of the variation on the y axis respect to the "peak" occurs
+def events_90_flux(x, y, limit, int_frac=0.9):
+    up_start, dn_start, up_end, dn_end, up_dmag, dn_dmag = flatten(x, y, limit)
+    x_starts = []
+    x_ends   = []
+    y_starts = []
+    y_ends   = []
+    flag     = []
+    
+    y = 10**(-0.4*y)
+    
+    ## For the "up" events the ending point is modified
+    for i in range(len(up_start)):
+        f = interp1d(y[up_start[i]:up_end[i]+1], x[up_start[i]:up_end[i]+1], kind='zero')
+        x_starts.append(x[up_start[i]])
+        x_ends.append(f(y[up_start[i]] + int_frac * (y[up_end[i]]-y[up_start[i]])))
+        y_starts.append(y[up_start[i]])
+        y_ends.append(y[up_start[i]] + int_frac * (y[up_end[i]]-y[up_start[i]]))
+        flag.append("demag")
+    ## For the "dn" events the starting point is modified
+    for i in range(len(dn_start)):
+        f = interp1d(y[dn_start[i]:dn_end[i]+1], x[dn_start[i]:dn_end[i]+1], kind='zero')
+        x_starts.append(f(y[dn_end[i]] - int_frac * (y[dn_end[i]]-y[dn_start[i]])))
+        x_ends.append(x[dn_end[i]])
+        y_starts.append(y[dn_end[i]] - int_frac * (y[dn_end[i]]-y[dn_start[i]]))
+        y_ends.append(y[dn_end[i]])
+        flag.append("demag")
+    
+    y_starts = -2.5*np.log10(y_starts)
+    y_ends = -2.5*np.log10(y_ends)
 
     return x_starts, x_ends, y_starts, y_ends, flag
 
