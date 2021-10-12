@@ -56,6 +56,7 @@ def flatten(x,y,limit):
     for i in range(len(ind)):
         for j in range(len(ind)):
             if np.abs(y[ind[j]] - y[ind[i]]) > limit and i < j:
+            #if i < j:
                 dmag_matrix[i,j] = y[ind[j]] - y[ind[i]]
 
 
@@ -71,12 +72,11 @@ def flatten(x,y,limit):
             j1 += 1
             continue
         if not np.all(dmag_matrix[:,j1] == mask):
-            i1 = np.max(np.where(dmag_matrix[:,j1] != 0))
+            i1 = np.min(np.where(dmag_matrix[:,j1] != 0))
             j2 = j1+1
             i2 = j2-1
             break
             
-        
     while aux1:
         if i1+1 == dmag_matrix.shape[0] or j1+1 == dmag_matrix.shape[1]:
             if dmag_matrix[i1,j1] > 0:
