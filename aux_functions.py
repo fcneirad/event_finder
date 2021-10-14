@@ -72,7 +72,7 @@ def flatten(x,y,limit):
             j1 += 1
             continue
         if not np.all(dmag_matrix[:,j1] == mask):
-            i1 = np.min(np.where(dmag_matrix[:,j1] != 0))
+            i1 = np.argmax(np.abs(dmag_matrix[:,j1]))
             j2 = j1+1
             i2 = j2-1
             break
